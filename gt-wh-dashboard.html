@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GT WH Processing Dashboard — Sales View</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+* { box-sizing:border-box; margin:0; padding:0 }
+body { background:#1A1A2E; color:#EAEAEA; font-family:'Segoe UI',sans-serif; padding:24px; min-height:100vh }
+.config-banner { background:#0F3460; border:1px solid #2A2A4A; border-radius:8px;
+  padding:12px 18px; margin-bottom:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+.config-banner label { font-size:.78rem; color:#A0A0B0; white-space:nowrap; font-weight:600 }
+.config-banner input { background:#1A1A2E; border:1px solid #2A2A4A; color:#EAEAEA;
+  border-radius:5px; padding:6px 10px; font-size:.78rem; flex:1; min-width:320px }
+.config-banner button { background:#00B4D8; border:none; color:#1A1A2E; border-radius:5px;
+  padding:7px 18px; font-size:.78rem; font-weight:700; cursor:pointer; white-space:nowrap }
+.config-banner button:hover { background:#00c8f0 }
+.header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; flex-wrap:wrap; gap:12px }
+.header h1 { font-size:1.35rem; font-weight:700; color:#00B4D8; letter-spacing:.5px }
+.header p  { font-size:.8rem; color:#A0A0B0; margin-top:4px }
+.status-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+.badge { background:#16213E; border:1px solid #2A2A4A; border-radius:6px; padding:6px 14px; font-size:.75rem; color:#A0A0B0 }
+.badge span { color:#00B4D8; font-weight:600 }
+.refresh-btn { background:#16213E; border:1px solid #2A2A4A; border-radius:6px;
+  padding:6px 14px; font-size:.75rem; color:#A0A0B0; cursor:pointer }
+.refresh-btn:hover { border-color:#00B4D8; color:#00B4D8 }
+.overlay { position:fixed; inset:0; background:rgba(26,26,46,.95);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:200 }
+.overlay.hidden { display:none }
+.spinner { width:38px; height:38px; border:3px solid #0F3460; border-top-color:#00B4D8;
+  border-radius:50%; animation:spin .8s linear infinite; margin-bottom:14px }
+@keyframes spin { to { transform:rotate(360deg) } }
+.loading-msg { color:#A0A0B0; font-size:.88rem; text-align:center; max-width:400px }
+.error-card { background:#16213E; border:1px solid #E94560; border-radius:10px;
+  padding:22px 28px; max-width:520px; text-align:left; display:none; margin-top:20px }
+.error-card h3 { color:#E94560; font-size:1rem; margin-bottom:10px }
+.error-card p  { color:#A0A0B0; font-size:.82rem; line-height:1.8 }
+.error-card code { background:#0F3460; border-radius:3px; padding:1px 6px; font-size:.78rem; color:#00B4D8 }
+.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px }
+.kpi { background:#16213E; border-radius:10px; padding:16px 18px; border-top:2px solid #0F3460 }
+.kpi.alert { border-top-color:#E94560 }
+.kpi.warn  { border-top-color:#F0A500 }
+.kpi.good  { border-top-color:#00B4D8 }
+.kpi-val   { font-size:1.8rem; font-weight:800; color:#EAEAEA; line-height:1 }
+.kpi-label { font-size:.72rem; color:#A0A0B0; margin-top:6px; text-transform:uppercase; letter-spacing:.5px }
+.kpi-sub   { font-size:.75rem; margin-top:4px }
+.sim-banner { background:linear-gradient(135deg,rgba(0,180,216,.08),rgba(15,52,96,.2));
+  border:1px solid rgba(0,180,216,.18); border-radius:10px; padding:14px 18px;
+  margin-bottom:20px; display:flex; align-items:center; gap:12px }
+.sim-icon { font-size:1.5rem }
+.sim-text h3 { font-size:.88rem; font-weight:700; color:#00B4D8 }
+.sim-text p  { font-size:.76rem; color:#A0A0B0; margin-top:2px }
+.section { background:#16213E; border-radius:12px; padding:22px; margin-bottom:22px }
+.section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px }
+.section-title { font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:#A0A0B0 }
+.tbl-wrap { overflow-x:auto }
+table { width:100%; border-collapse:collapse; font-size:.82rem }
+th { background:#0F3460; color:#A0A0B0; text-align:left; padding:10px 14px;
+     font-weight:600; text-transform:uppercase; font-size:.7rem; letter-spacing:.5px; white-space:nowrap }
+td { padding:11px 14px; border-bottom:1px solid #1e2a45; color:#EAEAEA; vertical-align:middle }
+tr:hover td { background:rgba(255,255,255,.02) }
+.sim-active td { background:rgba(0,180,216,.04) }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:22px }
+.chart-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px }
+.wh-btn { background:#0F3460; border:1px solid #2A2A4A; color:#A0A0B0; border-radius:5px;
+  padding:4px 10px; font-size:.74rem; cursor:pointer; transition:opacity .15s }
+.chart-wrap    { position:relative; height:300px }
+.chart-wrap-sm { position:relative; height:260px }
+.note { font-size:.72rem; color:#A0A0B0; margin-top:10px; font-style:italic; line-height:1.7 }
+.tip { cursor:help; border-bottom:1px dashed #A0A0B0 }
+@media(max-width:900px) {
+  .kpi-row { grid-template-columns:repeat(2,1fr) }
+  .grid2   { grid-template-columns:1fr }
+}
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loadingMsg">Loading data from Google Sheet...</div>
+  <div class="error-card" id="errorCard">
+    <h3>Could not load data</h3>
+    <p id="errorMsg"></p>
+    <p style="margin-top:12px">
+      <strong style="color:#EAEAEA">Steps to fix:</strong><br>
+      1. Open your Google Sheet<br>
+      2. Go to <code>File → Share → Publish to web</code><br>
+      3. First dropdown: select your sheet tab name<br>
+      4. Second dropdown: select <code>Comma-separated values (.csv)</code><br>
+      5. Click <code>Publish</code> → copy the URL<br>
+      6. Paste it in the bar above and click <code>Load / Refresh</code>
+    </p>
+    <button onclick="hideOverlay()" style="margin-top:14px;background:#0F3460;border:1px solid #2A2A4A;
+      color:#EAEAEA;border-radius:5px;padding:7px 16px;cursor:pointer;font-size:.8rem">← Fix URL above</button>
+  </div>
+</div>
+<div class="config-banner">
+  <label>📋 Google Sheet CSV URL</label>
+  <input type="text" id="sheetUrl"
+    placeholder="Paste your published Google Sheet CSV URL here — same format as your current Excel report, no changes needed">
+  <button onclick="loadData()">Load / Refresh</button>
+  <span style="font-size:.72rem;color:#A0A0B0">Auto-refreshes every <strong style="color:#00B4D8">30 min</strong></span>
+</div>
+<div class="header">
+  <div>
+    <h1>GT Warehouse Processing Dashboard</h1>
+    <p>Sales Order Processing Status · GT Channel · SLA: 48 hours after SO placement</p>
+  </div>
+  <div class="status-bar">
+    <div class="badge">Last updated: <span id="lastUpdated">—</span></div>
+    <div class="badge">Period: <span id="dataPeriod">—</span></div>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh now</button>
+  </div>
+</div>
+<div class="kpi-row" id="kpiRow">
+  <div class="kpi"><div class="kpi-val">—</div><div class="kpi-label">Awaiting data</div></div>
+  <div class="kpi"><div class="kpi-val">—</div><div class="kpi-label">Awaiting data</div></div>
+  <div class="kpi"><div class="kpi-val">—</div><div class="kpi-label">Awaiting data</div></div>
+  <div class="kpi"><div class="kpi-val">—</div><div class="kpi-label">Awaiting data</div></div>
+  <div class="kpi"><div class="kpi-val">—</div><div class="kpi-label">Awaiting data</div></div>
+</div>
+<div class="sim-banner">
+  <div class="sim-icon">🧮</div>
+  <div class="sim-text">
+    <h3>Order Simulator — enter new order qty per WH to see projected days-to-clear instantly</h3>
+    <p>Type units in the "New Orders" column. SLA = 48 hours (2 days). &nbsp;🟢 ON TRACK &nbsp;·&nbsp; 🟡 AT RISK &nbsp;·&nbsp; 🔴 SLA BREACH</p>
+  </div>
+</div>
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">WH Processing Status + Order Simulator</div>
+    <button onclick="clearAll()" style="background:#0F3460;border:1px solid #2A2A4A;color:#A0A0B0;
+      border-radius:5px;padding:5px 12px;font-size:.75rem;cursor:pointer">Clear Simulator</button>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>WH</th>
+          <th>Current Pending (units)</th>
+          <th><span class="tip" title="Avg daily invoice only on days where SO ≥ Forecast capacity. Excludes demand-starved idle days for accuracy.">Eff. Throughput/day ⓘ</span></th>
+          <th>Stated Capacity/day</th>
+          <th>Current DTC</th>
+          <th>SLA Status</th>
+          <th>➕ New Orders (units)</th>
+          <th>Projected DTC</th>
+          <th>Projected Status</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="9" style="text-align:center;color:#A0A0B0;padding:36px">
+          Paste your published Google Sheet CSV URL above and click Load / Refresh
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" id="tableNote"></p>
+</div>
+<div class="grid2">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Pendency vs Throughput</div>
+      <div style="font-size:.72rem;color:#A0A0B0">Bars = pending · Line = throughput/day</div>
+    </div>
+    <div class="chart-wrap-sm"><canvas id="pendencyChart"></canvas></div>
+  </div>
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Days-to-Clear by WH</div>
+      <div style="font-size:.72rem;color:#A0A0B0">Red dashed = 48hr SLA limit</div>
+    </div>
+    <div class="chart-wrap-sm"><canvas id="dtcChart"></canvas></div>
+  </div>
+</div>
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Daily SO vs Invoiced — Full Month Trend</div>
+    <div style="font-size:.72rem;color:#A0A0B0">Solid line = SO placed &nbsp;·&nbsp; Dashed = Invoiced</div>
+  </div>
+  <div class="chart-filters" id="chartFilters"></div>
+  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+</div>
+<script>
+// ════════════════════════════════════════════════════════════════
+// HARDCODE YOUR SHEET URL HERE (optional — saves re-typing)
+// ════════════════════════════════════════════════════════════════
+const DEFAULT_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT8ODeKu5mdA8lZnlMOl1JWpWx-ugLI1Qkeu0-MASy__02Nahgcsjef15HVkKCzqTEFvyA9K76k12zl/pub?gid=0&single=true&output=csv';
+// ════════════════════════════════════════════════════════════════
+// KNOWN WH CODES AND COLOURS
+// ════════════════════════════════════════════════════════════════
+const WH_NAMES = {
+  GGN:'Gurgaon', BHW:'Bhiwandi', BLR:'Bengaluru', CCU:'Kolkata',
+  KCH:'Kochi',   CHN:'Chennai',  BBI:'Bhubaneswar', VJW:'Vijayawada',
+  HYD:'Hyderabad', GHY:'Guwahati'
+};
+const WH_COLORS = {
+  GGN:'#00B4D8', BHW:'#6BCB77', BLR:'#F0A500', CCU:'#A78BFA',
+  KCH:'#60A5FA', CHN:'#FB923C', BBI:'#F472B6', VJW:'#34D399',
+  HYD:'#FBBF24', GHY:'#E94560'
+};
+const KNOWN_WHS = Object.keys(WH_NAMES);
+let whStats = {}, dailyData = {}, activeWHs = new Set();
+let pendChart, dtcChart, trndChart, refreshTimer;
+// ════════════════════════════════════════════════════════════════
+// RAG LOGIC
+// ════════════════════════════════════════════════════════════════
+function rag(dtc) {
+  if (dtc <= 1.0) return { color:'#00B4D8', label:'ON TRACK',   rgb:'0,180,216' };
+  if (dtc <= 2.0) return { color:'#F0A500', label:'AT RISK',    rgb:'240,165,0' };
+  return             { color:'#E94560', label:'SLA BREACH', rgb:'233,69,96' };
+}
+// ════════════════════════════════════════════════════════════════
+// CSV PARSER
+// Handles your exact report format:
+//   Row 0:  Location | GGN | GGN | GGN | GGN | GGN | BHW | BHW | ...
+//           (merged cells may export as blanks — handled by forward-fill)
+//   Row 1:  Day | Forecast Qty | SO Qty | Invoice Qty | Ach By SO % | Ach By Inv % | repeat...
+//   Rows 2+: 1,2,...28, then "Total", then blank, then filter text
+// ════════════════════════════════════════════════════════════════
+function parseCSV(raw) {
+  // Split lines
+  const lines = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  // RFC-4180 aware CSV split
+  function splitRow(line) {
+    const out=[]; let cur='', q=false;
+    for(let i=0;i<line.length;i++){
+      if(line[i]==='"'){ q=!q; }
+      else if(line[i]===','&&!q){ out.push(cur.trim()); cur=''; }
+      else cur+=line[i];
+    }
+    out.push(cur.trim());
+    return out.map(v=>v.replace(/^"|"$/g,'').trim());
+  }
+  const rows = lines.map(splitRow).filter(r=>r.some(c=>c!==''));
+  if(rows.length<3) throw new Error('Sheet appears empty or has fewer than 3 rows.');
+  const row0=rows[0]; // WH names (Location / GGN / GGN / ...)
+  const row1=rows[1]; // Metric names (Day / Forecast Qty / SO Qty / ...)
+  // Build column index with forward-fill for WH (handles merged cell blanks)
+  const colWH=[], colMetric=[];
+  let lastWH='';
+  for(let c=0;c<Math.max(row0.length,row1.length);c++){
+    const wh=(row0[c]||'').trim();
+    if(wh && wh!=='Location') lastWH=wh;
+    colWH[c]=lastWH;
+    colMetric[c]=(row1[c]||'').trim();
+  }
+  // Find column index for a given WH + metric
+  function col(wh,metric){
+    for(let c=0;c<colWH.length;c++){
+      if(colWH[c]===wh && colMetric[c]===metric) return c;
+    }
+    return -1;
+  }
+  // Detect which WHs exist in this sheet (only show known ones)
+  const sheetsWHs = [...new Set(colWH)].filter(w=>KNOWN_WHS.includes(w));
+  if(sheetsWHs.length===0) throw new Error(
+    'No recognised WH codes found in row 1 of the sheet. Expected codes like GGN, BHW, BLR, etc.');
+  // Parse day rows
+  const dayRows=[];
+  let period='';
+  for(let r=2;r<rows.length;r++){
+    const row=rows[r];
+    const cell0=(row[0]||'').trim();
+    if(!cell0) continue;
+    // Detect period from filter footnote
+    if(cell0.toLowerCase().includes('month-year')){
+      const m=cell0.match(/Month-Year is ([A-Za-z]+-\d+)/i);
+      if(m) period=m[1];
+      continue;
+    }
+    // Skip Total row and header repeats
+    if(cell0==='Total'||cell0==='Location'||cell0==='Day') continue;
+    const dayNum=parseInt(cell0);
+    if(isNaN(dayNum)||dayNum<1||dayNum>31) continue;
+    const rec={day:dayNum};
+    sheetsWHs.forEach(wh=>{
+      const fc =col(wh,'Forecast Qty');
+      const so =col(wh,'SO Qty');
+      const inv=col(wh,'Invoice Qty');
+      rec[wh]={
+        forecast: fc >=0 && row[fc]  ? parseFloat(row[fc])  : null,
+        so:       so >=0 && row[so]  ? parseFloat(row[so])  : null,
+        inv:      inv>=0 && row[inv] ? parseFloat(row[inv]) : null,
+      };
+    });
+    dayRows.push(rec);
+  }
+  if(dayRows.length===0) throw new Error(
+    'No day rows (numbers 1–28) found. Check that your sheet has the same row structure as the SAP export.');
+  // ── Compute stats per WH ──────────────────────────────────
+  const stats={}, daily={};
+  sheetsWHs.forEach(wh=>{
+    // Forecast = first non-null value (constant per WH in this report)
+    const fcRow=dayRows.find(r=>r[wh]?.forecast!=null);
+    const forecast=fcRow ? fcRow[wh].forecast : 0;
+    let totalSO=0, totalInv=0;
+    const fedInvs=[];   // invoice on days where SO >= capacity (demand-sufficient)
+    const allInvs=[];
+    dayRows.forEach(r=>{
+      const d=r[wh]||{};
+      if(d.so !=null) totalSO +=d.so;
+      if(d.inv!=null){ totalInv+=d.inv; allInvs.push(d.inv); }
+      // Demand-sufficient day: SO placed was at or above the WH capacity
+      if(d.so!=null && d.inv!=null && forecast>0 && d.so>=forecast) fedInvs.push(d.inv);
+    });
+    // Effective throughput: use fed-day avg if ≥3 data points, else overall avg
+    const avg = arr => arr.length>0 ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+    const effTp = fedInvs.length>=3 ? avg(fedInvs) : avg(allInvs);
+    const pending=Math.max(0, totalSO-totalInv);
+    const dtc=effTp>0 ? pending/effTp : 0;
+    stats[wh]={
+      forecast: Math.round(forecast),
+      totalSO:  Math.round(totalSO),
+      totalInv: Math.round(totalInv),
+      pending:  Math.round(pending),
+      effTp:    Math.round(effTp),
+      dtc:      Math.round(dtc*10)/10,
+      fedDays:  fedInvs.length,
+      totalDays:allInvs.length,
+    };
+    daily[wh]=dayRows.map(r=>({
+      day:r.day, so:r[wh]?.so??null, inv:r[wh]?.inv??null
+    }));
+  });
+  return {stats, daily, period, whs:sheetsWHs};
+}
+// ════════════════════════════════════════════════════════════════
+// RENDER DASHBOARD
+// ════════════════════════════════════════════════════════════════
+function render(stats, daily, period, whs){
+  whStats=stats; dailyData=daily; activeWHs=new Set(whs);
+  document.getElementById('lastUpdated').textContent=
+    new Date().toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('dataPeriod').textContent=period||'Current period';
+  // KPIs
+  const breach=whs.filter(w=>stats[w].dtc>2);
+  const warn_=whs.filter(w=>stats[w].dtc>1&&stats[w].dtc<=2);
+  const ok=whs.filter(w=>stats[w].dtc<=1);
+  const totPend=whs.reduce((s,w)=>s+stats[w].pending,0);
+  const worst=whs.reduce((a,b)=>stats[a].dtc>stats[b].dtc?a:b,whs[0]);
+  document.getElementById('kpiRow').innerHTML=`
+    <div class="kpi alert">
+      <div class="kpi-val">${breach.length}</div>
+      <div class="kpi-label">WHs Breaching SLA (&gt;2d)</div>
+      <div class="kpi-sub" style="color:#E94560">${breach.join(' · ')||'None'}</div>
+    </div>
+    <div class="kpi warn">
+      <div class="kpi-val">${warn_.length}</div>
+      <div class="kpi-label">WHs At Risk (1–2d)</div>
+      <div class="kpi-sub" style="color:#F0A500">${warn_.join(' · ')||'None'}</div>
+    </div>
+    <div class="kpi good">
+      <div class="kpi-val">${ok.length}</div>
+      <div class="kpi-label">WHs On Track (&lt;1d)</div>
+      <div class="kpi-sub" style="color:#00B4D8">${ok.join(' · ')||'None'}</div>
+    </div>
+    <div class="kpi alert">
+      <div class="kpi-val">${totPend.toLocaleString()}</div>
+      <div class="kpi-label">Total Pending Units</div>
+      <div class="kpi-sub" style="color:#A0A0B0">${whs.length} active WHs</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-val">${stats[worst].dtc.toFixed(1)}d</div>
+      <div class="kpi-label">Worst DTC · ${worst}</div>
+      <div class="kpi-sub" style="color:${rag(stats[worst].dtc).color}">${rag(stats[worst].dtc).label}</div>
+    </div>`;
+  // Table
+  const notes=[];
+  let html='';
+  whs.forEach(w=>{
+    const s=stats[w]; const r=rag(s.dtc);
+    if(s.effTp>s.forecast*1.5 && s.forecast>0)
+      notes.push(`${w}: Effective throughput (${s.effTp.toLocaleString()}) exceeds stated capacity (${s.forecast.toLocaleString()}) — capacity benchmark in source report may be understated.`);
+    if(s.fedDays<3)
+      notes.push(`${w}: Only ${s.fedDays} demand-sufficient days found — using overall average as throughput estimate.`);
+    html+=`
+      <tr data-wh="${w}">
+        <td>
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="width:9px;height:9px;border-radius:50%;background:${r.color};flex-shrink:0"></div>
+            <div>
+              <div style="font-weight:700">${w}</div>
+              <div style="font-size:.7rem;color:#A0A0B0">${WH_NAMES[w]||''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="font-weight:600">${s.pending.toLocaleString()}</td>
+        <td style="color:#A0A0B0">${s.effTp.toLocaleString()}
+          <span style="font-size:.68rem;color:#5a6a80">(${s.fedDays}d fed)</span></td>
+        <td style="color:#A0A0B0">${s.forecast.toLocaleString()}</td>
+        <td style="color:${r.color};font-weight:700">${s.dtc.toFixed(1)}d</td>
+        <td><span style="background:rgba(${r.rgb},.15);color:${r.color};
+          padding:3px 10px;border-radius:4px;font-size:.72rem;font-weight:700">${r.label}</span></td>
+        <td>
+          <input type="number" id="ni-${w}" placeholder="Enter units" min="0"
+            style="background:#0F3460;border:1px solid #2A2A4A;color:#EAEAEA;
+                   border-radius:6px;padding:6px 10px;width:115px;font-size:.82rem"
+            oninput="simulate()">
+        </td>
+        <td id="sd-${w}" style="color:#A0A0B0">—</td>
+        <td id="ss-${w}">—</td>
+      </tr>`;
+  });
+  document.getElementById('tableBody').innerHTML=html;
+  document.getElementById('tableNote').textContent=notes.length?'⚠ '+notes.join(' · '):'';
+  renderPendency(whs,stats);
+  renderDTC(whs,stats);
+  renderTrend(whs,daily);
+}
+// ── Charts ─────────────────────────────────────────────────────
+function renderPendency(whs,stats){
+  if(pendChart) pendChart.destroy();
+  pendChart=new Chart(document.getElementById('pendencyChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:whs,datasets:[
+      {label:'Pending Units',data:whs.map(w=>stats[w].pending),
+       backgroundColor:whs.map(w=>rag(stats[w].dtc).color),borderRadius:5,yAxisID:'y'},
+      {label:'Eff. Throughput/day',data:whs.map(w=>stats[w].effTp),type:'line',
+       borderColor:'#00B4D8',backgroundColor:'transparent',borderWidth:2,
+       pointRadius:4,pointBackgroundColor:'#00B4D8',yAxisID:'y',tension:.2}
+    ]},
+    options:baseOpts('Units')
+  });
+}
+function renderDTC(whs,stats){
+  if(dtcChart) dtcChart.destroy();
+  dtcChart=new Chart(document.getElementById('dtcChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:whs,datasets:[
+      {label:'Days to Clear',data:whs.map(w=>stats[w].dtc),
+       backgroundColor:whs.map(w=>rag(stats[w].dtc).color),borderRadius:5},
+      {label:'48hr SLA',data:whs.map(()=>2),type:'line',
+       borderColor:'#E94560',borderDash:[6,4],borderWidth:1.5,
+       backgroundColor:'transparent',pointRadius:0}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#A0A0B0',font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label==='Days to Clear'
+          ?` ${c.raw.toFixed(1)} days`:' SLA limit: 2 days'}}},
+      scales:{
+        x:{ticks:{color:'#EAEAEA',font:{weight:'600'}},grid:{color:'#2A2A4A'}},
+        y:{ticks:{color:'#A0A0B0'},grid:{color:'#2A2A4A'},
+           title:{display:true,text:'Days',color:'#A0A0B0'}}}
+    }
+  });
+}
+function renderTrend(whs,daily){
+  buildToggles(whs,daily);
+  buildTrend(whs,daily);
+}
+function buildToggles(whs,daily){
+  const c=document.getElementById('chartFilters'); c.innerHTML='';
+  whs.forEach(w=>{
+    const btn=document.createElement('button');
+    btn.className='wh-btn';
+    btn.textContent=w+(WH_NAMES[w]?' · '+WH_NAMES[w]:'');
+    btn.style.borderColor=WH_COLORS[w]||'#A0A0B0';
+    btn.style.color=WH_COLORS[w]||'#A0A0B0';
+    btn.style.opacity='1';
+    btn.onclick=()=>{
+      if(activeWHs.has(w)){activeWHs.delete(w);btn.style.opacity='.3';}
+      else{activeWHs.add(w);btn.style.opacity='1';}
+      buildTrend(whs,daily);
+    };
+    c.appendChild(btn);
+  });
+}
+function buildTrend(whs,daily){
+  const allDays=[...new Set(Object.values(daily).flatMap(d=>d.map(r=>r.day)))].sort((a,b)=>a-b);
+  const datasets=[];
+  whs.forEach(w=>{
+    if(!activeWHs.has(w)||!daily[w]) return;
+    const col=WH_COLORS[w]||'#A0A0B0';
+    const soArr =allDays.map(d=>{const r=daily[w].find(x=>x.day===d);return r?.so??null;});
+    const invArr=allDays.map(d=>{const r=daily[w].find(x=>x.day===d);return r?.inv??null;});
+    datasets.push({label:`${w} SO`, data:soArr, borderColor:col,backgroundColor:col+'25',
+      borderWidth:2,tension:.3,spanGaps:true,pointRadius:2});
+    datasets.push({label:`${w} Inv`,data:invArr,borderColor:col,backgroundColor:'transparent',
+      borderDash:[5,3],borderWidth:1.5,tension:.3,spanGaps:true,pointRadius:2});
+  });
+  if(trndChart) trndChart.destroy();
+  trndChart=new Chart(document.getElementById('trendChart').getContext('2d'),{
+    type:'line',
+    data:{labels:allDays.map(d=>'Day '+d),datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#A0A0B0',font:{size:10},boxWidth:18,filter:i=>i.text.includes('SO')}},
+        tooltip:{callbacks:{
+          title:c=>'Day '+allDays[c[0].dataIndex],
+          label:c=>` ${c.dataset.label}: ${c.raw!=null?Math.round(c.raw).toLocaleString():'N/A'} units`
+        }}
+      },
+      scales:{
+        x:{ticks:{color:'#A0A0B0'},grid:{color:'#2A2A4A'}},
+        y:{ticks:{color:'#A0A0B0'},grid:{color:'#2A2A4A'},
+           title:{display:true,text:'Units',color:'#A0A0B0'}}
+      }
+    }
+  });
+}
+function baseOpts(label){
+  return{
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#A0A0B0',font:{size:11}}},
+      tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${Math.round(c.raw).toLocaleString()}`}}},
+    scales:{
+      x:{ticks:{color:'#EAEAEA',font:{weight:'600'}},grid:{color:'#2A2A4A'}},
+      y:{ticks:{color:'#A0A0B0'},grid:{color:'#2A2A4A'},
+         title:{display:true,text:label,color:'#A0A0B0'}}}
+  };
+}
+// ════════════════════════════════════════════════════════════════
+// SIMULATOR
+// ════════════════════════════════════════════════════════════════
+function simulate(){
+  Object.keys(whStats).forEach(w=>{
+    const inp=document.getElementById('ni-'+w);
+    if(!inp) return;
+    const val=parseFloat(inp.value)||0;
+    const s=whStats[w];
+    const sdEl=document.getElementById('sd-'+w);
+    const ssEl=document.getElementById('ss-'+w);
+    const row=inp.closest('tr');
+    if(val>0){
+      const newDTC=s.effTp>0?(s.pending+val)/s.effTp:0;
+      const r=rag(newDTC);
+      sdEl.innerHTML=`<span style="color:${r.color};font-weight:700">${newDTC.toFixed(1)}d</span>`;
+      ssEl.innerHTML=`<span style="background:rgba(${r.rgb},.15);color:${r.color};
+        padding:3px 10px;border-radius:4px;font-size:.72rem;font-weight:700">${r.label}</span>`;
+      row.classList.add('sim-active');
+    } else {
+      sdEl.innerHTML='—';ssEl.innerHTML='—';
+      row.classList.remove('sim-active');
+    }
+  });
+}
+function clearAll(){
+  Object.keys(whStats).forEach(w=>{
+    const inp=document.getElementById('ni-'+w);
+    if(inp){inp.value='';inp.closest('tr').classList.remove('sim-active');}
+    ['sd-','ss-'].forEach(p=>{const el=document.getElementById(p+w);if(el)el.innerHTML='—';});
+  });
+}
+// ════════════════════════════════════════════════════════════════
+// DATA LOAD
+// ════════════════════════════════════════════════════════════════
+function showOverlay(msg){
+  document.getElementById('loadingMsg').textContent=msg||'Loading...';
+  document.getElementById('errorCard').style.display='none';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function hideOverlay(){ document.getElementById('overlay').classList.add('hidden'); }
+function showError(msg){
+  document.getElementById('errorMsg').textContent=msg;
+  document.getElementById('errorCard').style.display='block';
+}
+async function loadData(){
+  const url=(document.getElementById('sheetUrl').value.trim()||DEFAULT_URL);
+  if(!url){
+    alert('Please paste your Google Sheet CSV URL in the config bar above.\nSee the setup guide for exact steps.');
+    return;
+  }
+  showOverlay('Fetching latest data from Google Sheet...');
+  clearTimeout(refreshTimer);
+  try{
+    const bust=url.includes('?')?url+'&cb='+Date.now():url+'?cb='+Date.now();
+    const resp=await fetch(bust);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status} — is the sheet published as CSV?`);
+    const text=await resp.text();
+    if(!text||text.length<30) throw new Error('Empty response — sheet may not be published yet');
+    const {stats,daily,period,whs}=parseCSV(text);
+    render(stats,daily,period,whs);
+    hideOverlay();
+    refreshTimer=setTimeout(loadData,30*60*1000);
+  } catch(err){
+    showError(err.message);
+    console.error(err);
+  }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  if(DEFAULT_URL){ document.getElementById('sheetUrl').value=DEFAULT_URL; loadData(); }
+  else hideOverlay();
+});
+</script>
+</body>
+</html>
